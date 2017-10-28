@@ -42,6 +42,9 @@ public class LogBroker implements Config {
 	private long transactionId = 0L;
 	private Writer stalenessOutPut;
 	public static Timestamp uptodate = null;
+	private long cummulativeStaleness = 0L;
+	private long averageStaleness = 0L;
+	private int count =0;
 
 
 	public LogBroker(long sessionStartTime, long sessionEndTime) {
@@ -51,7 +54,7 @@ public class LogBroker implements Config {
 		this.map = new HashMap<Timestamp, HashSet<Long>>();
 		this.changeCount = Integer.parseInt(System.getProperty("changeCount"));
 		this.sleepDuration = Long.parseLong(System.getProperty("sleepDuration"));
-		String query = "SELECT xid, data FROM pg_logical_slot_peek_changes('replication_slot', NULL, " + changeCount
+		String query = "SELECT xid, data FROM pg_logical_slot_get_changes('replication_slot', NULL, " + changeCount
 				+ ")";
 
 		try {
@@ -68,7 +71,7 @@ public class LogBroker implements Config {
 			output2 = new PrintStream(logSocketClient2.getOutputStream());
 
 			// initializing writer for staleness
-			String stalenessFileName = "staleness_log_no_of_change_" + changeCount + "_sleep_duration_" + sleepDuration
+			String stalenessFileName = "staleness_log_based_sleep_duration_" + sleepDuration +"_change_count_" + changeCount
 					+ "_" + dateFormat.format(new Date());
 
 			stalenessOutPut = new BufferedWriter(
@@ -86,7 +89,7 @@ public class LogBroker implements Config {
 			ids.clear();
 			
 
-			//sleep for specified number of time
+			//sleep for specified time
 			try {
 				Thread.sleep(sleepDuration);
 			} catch (InterruptedException e1) {
@@ -147,10 +150,13 @@ public class LogBroker implements Config {
 //				Timestamp t = rs.getTimestamp(1);
 
 				long staleness = System.currentTimeMillis() - uptodate.getTime();
-				stalenessOutPut.append((System.currentTimeMillis() - sessionStartTime) + "," + staleness + "\n");
-				stalenessOutPut.flush();
+				count++;
+				cummulativeStaleness += staleness;
+				averageStaleness = cummulativeStaleness/count;
 				
-				System.out.println("Staleness : "+ staleness);
+				stalenessOutPut.append((System.currentTimeMillis() - sessionStartTime) + "," + averageStaleness + "\n");
+				stalenessOutPut.flush();
+			
 
 			} catch (SQLException | IOException e) {
 				// TODO Auto-generated catch block
